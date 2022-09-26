@@ -280,7 +280,7 @@ async fn main() -> Result<(), sqlx::Error> {
     match args.command {
         Commands::Set { key, value } => {
             match store.set(&key, &value).await {
-                Ok(_) => println!("ok"),
+                Ok(_) => (),
                 Err(e) => println!("{:?}", e),
             } 
         },
@@ -298,7 +298,7 @@ async fn main() -> Result<(), sqlx::Error> {
         },
         Commands::Delete { key } => {
             match store.del(&key).await {
-                Ok(_) => println!("ok"),
+                Ok(_) => (),
                 Err(e) => println!("{:?}", e),
             } 
         },
