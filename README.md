@@ -28,6 +28,16 @@ SUBCOMMANDS:
     values      Get a list of all values in the datastore
 ```
 
+## Install
+```bash
+cargo install --git https://github.com/ellabellla/ds-rust.git 
+```
+
+## Uninstall
+```bash
+cargo uninstall dsr
+```
+
 ## License
 This software is provided under the MIT license. Click [here](LICENSE) to view.
 
