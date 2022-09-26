@@ -1,7 +1,34 @@
-use std::{str::FromStr};
-
+use std::{str::FromStr, fs};
 use sqlx::{sqlite::{SqlitePool, SqliteConnectOptions, SqliteRow}, QueryBuilder, Row, pool::PoolConnection, Sqlite};
+use clap::{Parser, Subcommand};
 
+#[derive(Parser)]
+#[clap(author, version, about, long_about = None)]
+#[clap(propagate_version = true)]
+struct Cli {
+    #[clap(long)]
+    /// Specify datastore location
+    ds: Option<String>,
+
+    #[clap(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Set the value of a record
+    Set { key: String, value: String },
+    /// Check if a record exists
+    Contains { key: String },
+    /// Get the value of a record
+    Get { key: String },
+    /// Get a list of all keys in the datastore
+    Keys,
+    /// Get a list of all values in the datastore
+    Values,
+    /// Get a list of all records in the datastore
+    Records,
+}
 
 struct KVLite {
     pool: SqlitePool,
@@ -101,7 +128,7 @@ impl KVLite {
         Ok(rows)
     }
 
-    pub async fn items(&self) -> Result<Vec<SqliteRow>, sqlx::Error> {
+    pub async fn records(&self) -> Result<Vec<SqliteRow>, sqlx::Error> {
         let mut conn = self.pool.acquire().await?;
         
         let rows = QueryBuilder::new(format!(r#"
@@ -110,7 +137,6 @@ impl KVLite {
             .build()
             .fetch_all(&mut conn)
             .await?;
-
         Ok(rows)
     }
 
@@ -156,7 +182,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_KVLite() -> Result<(), sqlx::Error> {
+    async fn test_kv_lite() -> Result<(), sqlx::Error> {
         let store = setup_store().await?;
 
         for i in 0..100 {
@@ -188,15 +214,15 @@ mod tests {
             assert_eq!(value.get::<String, &str>("value"), format!("value{}", i))
         }
 
-        let mut items = store.items().await.unwrap();
-        items.sort_by(|a, b| 
+        let mut records = store.records().await.unwrap();
+        records.sort_by(|a, b| 
             a.get::<String,&str>("key")[3..].parse::<i32>().unwrap()
         .cmp(
             &b.get::<String,&str>("key")[3..].parse::<i32>().unwrap()
         ));
-        for (i, item) in items.iter().enumerate() {
-            assert_eq!(item.get::<String, &str>("key"), format!("key{}", i));
-            assert_eq!(item.get::<String, &str>("value"), format!("value{}", i));
+        for (i, record) in records.iter().enumerate() {
+            assert_eq!(record.get::<String, &str>("key"), format!("key{}", i));
+            assert_eq!(record.get::<String, &str>("value"), format!("value{}", i));
         }
 
         assert!(matches!(store.contains("not in store").await, Ok(false)));
@@ -210,10 +236,72 @@ mod tests {
 
 #[tokio::main]
 async fn main() -> Result<(), sqlx::Error> {
-    let store = KVLite::new("sqlite://tmp.db", "store", false, true).await?;
-    store.set("test", "testing value").await?;
+    let default_db_dir = "ds-rust/";
+    let default_db_name = "ds.db";
+    let default_db_prefix = "sqlite://";
 
-    println!("{}", store.get("test").await?);
+    let args = Cli::parse();
+
+    let db_path = match args.ds {
+        Some(db_path) => db_path,
+        None => {
+            let mut db_path = dirs::config_dir().expect("couldn't find a default db location");
+            db_path.push(default_db_dir);
+            fs::create_dir_all(&db_path)?;
+            db_path.push(default_db_name);
+            let db_path = db_path.to_str().expect("couldn't find a default db location").to_string();
+            format!("{}{}", default_db_prefix, db_path)
+        },
+    };
+
+    let store = KVLite::new(&db_path, "store", false, true).await?;
+    
+    
+    match args.command {
+        Commands::Set { key, value } => {
+            match store.set(&key, &value).await {
+                Ok(_) => println!("ok"),
+                Err(e) => println!("{:?}", e),
+            } 
+        },
+        Commands::Contains { key } => {
+            match store.contains(&key).await {
+                Ok(res) => println!("{}", res),
+                Err(e) => println!("{:?}", e),
+            } 
+        },
+        Commands::Get { key } => {
+            match store.get(&key).await {
+                Ok(res) => println!("{}", res),
+                Err(e) => println!("{:?}", e),
+            } 
+        },
+        Commands::Keys =>  {
+            match store.keys().await {
+                Ok(res) => for key in res {
+                    println!("{}", key.get::<String, &str>("key"))
+                },
+                Err(e) => println!("{:?}", e),
+            } 
+        },
+        Commands::Values =>  {
+            match store.values().await {
+                Ok(res) => for value in res {
+                    println!("{}", value.get::<String, &str>("value"))
+                },
+                Err(e) => println!("{:?}", e),
+            } 
+        },
+        Commands::Records =>  {
+            match store.records().await {
+                Ok(res) => for record in res {
+                    print!("{} ", record.get::<String, &str>("key"));
+                    println!("{}", record.get::<String, &str>("value"))
+                },
+                Err(e) => println!("{:?}", e),
+            } 
+        },
+    }
 
     Ok(())
 }

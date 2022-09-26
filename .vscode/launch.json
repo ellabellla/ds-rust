@@ -19,7 +19,7 @@
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": ["records"],
             "cwd": "${workspaceFolder}"
         },
         {
