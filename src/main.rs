@@ -22,6 +22,8 @@ enum Commands {
     Contains { key: String },
     /// Get the value of a record
     Get { key: String },
+    /// Delete a record
+    Delete { key: String },
     /// Get a list of all keys in the datastore
     Keys,
     /// Get a list of all values in the datastore
@@ -101,6 +103,21 @@ impl KVLite {
 
         Ok(())
     }
+
+    pub async fn del(&self, key: &str) -> Result<(), sqlx::Error> {
+        let mut conn = self.pool.acquire().await?;
+        
+        QueryBuilder::new(format!(r#"
+                DELETE FROM {} WHERE key=
+            "#, self.kv_name))
+            .push_bind(key)
+            .build()
+            .execute(&mut conn)
+            .await?;
+
+        Ok(())
+    }
+
 
     pub async fn keys(&self) -> Result<Vec<SqliteRow>, sqlx::Error> {
         let mut conn = self.pool.acquire().await?;
@@ -230,6 +247,9 @@ mod tests {
             assert!(matches!(store.contains(&format!("key{}", i)).await, Ok(true)))
         }
 
+        assert!(matches!(store.del("key1").await, Ok(())));
+        assert!(matches!(store.contains("key1").await, Ok(false)));
+
         Ok(())
     }
 }
@@ -273,6 +293,12 @@ async fn main() -> Result<(), sqlx::Error> {
         Commands::Get { key } => {
             match store.get(&key).await {
                 Ok(res) => println!("{}", res),
+                Err(e) => println!("{:?}", e),
+            } 
+        },
+        Commands::Delete { key } => {
+            match store.del(&key).await {
+                Ok(_) => println!("ok"),
                 Err(e) => println!("{:?}", e),
             } 
         },
