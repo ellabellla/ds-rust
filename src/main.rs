@@ -321,7 +321,7 @@ async fn main() -> Result<(), sqlx::Error> {
         Commands::Records =>  {
             match store.records().await {
                 Ok(res) => for record in res {
-                    print!("{} ", record.get::<String, &str>("key"));
+                    print!("{},", record.get::<String, &str>("key"));
                     println!("{}", record.get::<String, &str>("value"))
                 },
                 Err(e) => println!("{:?}", e),
